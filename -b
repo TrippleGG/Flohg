@@ -1,0 +1,551 @@
+@@ -0,0 +1,550 @@
+Monorepo tree
+
+flohg/
+README.md
+docs/
+openapi.yaml
+architecture.md
+runbook.md
+api/
+package.json
+tsconfig.json
+nest-cli.json
+src/
+main.ts
+app.module.ts
+common/
+guards/
+auth.guard.ts
+filters/
+http-exception.filter.ts
+interceptors/
+logging.interceptor.ts
+dto/
+pagination.dto.ts
+config/
+config.module.ts
+config.service.ts
+database/
+ormconfig.ts
+migrations/
+0001_init.sql
+seeds/
+seed.ts
+data/
+categories.json
+pricing-bands.json
+lagos-lgas.json
+modules/
+auth/
+auth.module.ts
+auth.controller.ts
+auth.service.ts
+dto/
+otp-start.dto.ts
+otp-verify.dto.ts
+users/
+users.module.ts
+users.controller.ts
+users.service.ts
+entities/user.entity.ts
+tasks/
+tasks.module.ts
+tasks.controller.ts
+tasks.service.ts
+entities/task.entity.ts
+dto/create-task.dto.ts
+offers/
+offers.module.ts
+offers.controller.ts
+offers.service.ts
+entities/offer.entity.ts
+agreements/
+agreements.module.ts
+agreements.controller.ts
+agreements.service.ts
+entities/agreement.entity.ts
+payments/
+payments.module.ts
+payments.controller.ts
+payments.service.ts
+providers/
+paystack.client.ts
+pricing/
+pricing.module.ts
+pricing.controller.ts
+pricing.service.ts
+verifications/
+verifications.module.ts
+verifications.controller.ts
+verifications.service.ts
+admin/
+admin.module.ts
+admin.controller.ts
+admin.service.ts
+utils/
+geo.ts
+.env.example
+docker-compose.yml
+Dockerfile
+mobile/
+pubspec.yaml
+lib/
+main.dart
+app.dart
+theme.dart
+router.dart
+common/
+api_client.dart
+models/
+task.dart
+env.dart
+features/
+auth/
+login_screen.dart
+otp_screen.dart
+tasks/
+create_task_screen.dart
+task_feed_screen.dart
+task_detail_screen.dart
+attribute_form.dart
+offers/
+make_offer_sheet.dart
+profile/
+profile_screen.dart
+next_of_kin_screen.dart
+referee_screen.dart
+verification_status_screen.dart
+.env.example
+admin/
+package.json
+next.config.js
+pages/
+index.tsx
+verifications.tsx
+disputes.tsx
+payments.tsx
+users.tsx
+tasks.tsx
+lib/api.ts
+.env.example
+infra/
+README.md
+.editorconfig
+.gitignore
+# Flohg — MVP Monorepo
+
+This repo contains:
+- api (NestJS + TypeORM + Postgres/PostGIS + Redis)
+- mobile (Flutter)
+- admin (Next.js)
+- docs (OpenAPI, architecture, runbook)
+
+## Quickstart (local)
+
+Prereqs: Docker, Node 20+, pnpm or npm, Flutter stable.
+
+### API
+cd api
+cp .env.example .env
+docker compose up -d
+pnpm i
+pnpm run build
+pnpm run migrate
+pnpm run seed
+pnpm run start:dev
+
+API docs at [localhost](http://localhost:8080/docs)
+
+### Mobile
+cd mobile
+cp .env.example .env
+flutter pub get
+flutter run -d <device>
+
+Android emulator base URL uses 10.0.2.2 to reach localhost.
+
+### Admin
+cd admin
+cp .env.example .env.local
+pnpm i
+pnpm run dev
+
+### Webhooks
+Use ngrok to expose [localhost](http://localhost:8080) and configure Paystack webhooks:
+ngrok http 8080 → https://<id>.ngrok.io/payments/webhook/paystack
+openapi: 3.0.3
+info:
+  title: Flohg API
+  version: 1.1.0
+servers:
+  - url: [api.flohg.local](https://api.flohg.local)
+paths:
+  /auth/otp/start:
+    post:
+      summary: Start OTP login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: phone:
+                type: string
+      responses:
+        '200': { description: OTP sent }
+  /auth/otp/verify:
+    post:
+      summary: Verify OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone: { type: string }
+                code: { type: string }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+  /tasks:
+    get:
+      summary: Search posted tasks nearby
+      parameters:
+        - in: query; name: lat; schema: { type: number }
+        - in: query; name: lng; schema: { type: number }
+        - in: query; name: radiusKm; schema: { type: number, default: 10 }
+        - in: query; name: categoryId; schema: { type: string }
+        - in: query; name: subcategoryId; schema: { type: string }
+        - in: query; name: status; schema: { type: string, enum: [posted] }
+        - in: query; name: requiresVerified; schema: { type: string, enum: [driver_license, degree] }
+      responses:
+        '200':
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Task' }
+    post:
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTask' }
+      responses:
+        '201': { description: Created }
+  /tasks/{id}:
+    get:
+      summary: Get task detail
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+  /tasks/{id}/offers:
+    post:
+      summary: Create offer on a task (guarded by verification where applicable)
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: integer, description: NGN }
+                message: { type: string }
+                etaMinutes: { type: integer }
+      responses:
+        '201': { description: Offer created }
+  /offers/{id}:
+    patch:
+      summary: Counter/withdraw/accept
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [counter, withdraw, accept] }
+                amount: { type: integer }
+      responses:
+        '200': { description: Updated }
+  /offers/{id}/accept:
+    post:
+      summary: Accept offer → Agreement + escrow init
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Agreement' }
+  /agreements/{id}/escrow/hold:
+    post:
+      summary: Idempotent escrow hold (card auth or virtual account)
+      responses: { '200': { description: OK } }
+  /agreements/{id}/release:
+    post:
+      summary: Release escrow on completion
+      responses: { '200': { description: Released } }
+  /agreements/{id}/refund:
+    post:
+      summary: Refund after dispute resolution
+      responses: { '200': { description: Refunded } }
+  /payments/webhook/paystack:
+    post:
+      summary: Paystack webhook
+      responses: { '200': { description: OK } }
+  /verifications/status:
+    get:
+      summary: Current user verification statuses
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationStatus' }
+  /verifications/driver-license:
+    post:
+      summary: Submit driver license for verification (Taxi categories)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                number: { type: string }
+                expiry: { type: string, format: date }
+                docUrl: { type: string }
+                selfieUrl: { type: string }
+      responses: { '202': { description: Pending review } }
+  /verifications/degree:
+    post:
+      summary: Submit degree proof (Tutoring)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                level: { type: string }
+                institution: { type: string }
+                docUrl: { type: string }
+      responses: { '202': { description: Pending review } }
+  /verifications/referee/confirm:
+    post:
+      summary: Public endpoint hit by SMS form
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+                score: { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string }
+      responses: { '200': { description: Stored } }
+  /pricing/suggest:
+    get:
+      summary: Price suggestion by category and attributes
+      parameters:
+        - in: query; name: categoryId; schema: { type: string }
+        - in: query; name: subcategoryId; schema: { type: string }
+        - in: query; name: attrs; schema: { type: string, description: JSON-encoded }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  min: { type: integer }
+                  median: { type: integer }
+                  max: { type: integer }
+                  rationale: { type: string }
+components:
+  schemas:
+    Task:
+      type: object
+      properties:
+        id: { type: string }
+        requesterId: { type: string }
+        categoryId: { type: string }
+        subcategoryId: { type: string, nullable: true }
+        title: { type: string }
+        description: { type: string }
+        attributes: { type: object, additionalProperties: true }
+        photos:
+          type: array
+          items: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        addressText: { type: string }
+        landmark: { type: string, nullable: true }
+        lga: { type: string, nullable: true }
+        scheduledAt: { type: string, format: date-time, nullable: true }
+        budgetProposed: { type: integer }
+        priceType: { type: string, enum: [fixed, negotiable] }
+        status: { type: string, enum: [posted, accepted, in_progress, submitted, completed, cancelled] }
+    CreateTask:
+      allOf:
+        - $ref: '#/components/schemas/Task'
+      required: [categoryId, title, description, attributes, lat, lng, addressText, budgetProposed, priceType]
+    Agreement:
+      type: object
+      properties:
+        id: { type: string }
+        taskId: { type: string }
+        taskerId: { type: string }
+        agreedAmount: { type: integer }
+        acceptedAt: { type: string, format: date-time }
+        escrow:
+          type: object
+          properties:
+            type: { type: string, enum: [card_auth, virtual_account] }
+            provider: { type: string, enum: [paystack] }
+            status: { type: string, enum: [pending, held, released, refunded, failed] }
+            vaBank: { type: string, nullable: true }
+            vaAccount: { type: string, nullable: true }
+            expiresAt: { type: string, format: date-time, nullable: true }
+    VerificationStatus:
+      type: object
+      properties:
+        nextOfKin: { type: boolean }
+        referee: { type: boolean }
+        driverLicense: { type: string, enum: [missing, pending, approved, rejected] }
+        degree: { type: string, enum: [missing, pending, approved, rejected] }
+## Architecture Overview
+
+- Mobile (Flutter) consumes REST + WebSocket (future) from API.
+- API (NestJS) modules:
+  - Auth (OTP via Termii)
+  - Users (profiles, KYC tiers, next-of-kin, referee)
+  - Verifications (driver license, degree, referee confirm)
+  - Tasks (JSONB attributes, PostGIS search)
+  - Offers (negotiation, counters)
+  - Agreements (accept → escrow)
+  - Payments (Paystack: card auth or virtual account; webhook handling)
+  - Pricing (heuristic price suggestions)
+  - Admin (verification queue, disputes, payments events)
+- Data: Postgres + PostGIS; Redis for queues and caching.
+- Media: S3-compatible (configure later).
+
+Trust gates:
+- Taxi: driver license approved
+- Tutoring: degree approved
+- Withdrawals: next of kin + referee required
+## Ops Runbook (Pilot)
+
+- OTP: Termii; rate limit per phone/IP.
+- Escrow: Card auth preferred; Virtual Account with 30–60 min expiry.
+- Auto-release: 48h after submission absent dispute.
+- Disputes: freeze release, collect evidence, resolve in admin.
+- Verifications: queue targets <24h turnaround.
+- Metrics to watch: time-to-first-offer, completion rate, dispute rate, payout latency.
+{
+  "name": "flohg-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "migrate": "node ./node_modules/typeorm/cli.js migration:run -d ./src/database/ormconfig.ts",
+    "seed": "ts-node src/database/seeds/seed.ts",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/core": "^10.0.0",
+    "@nestjs/platform-express": "^10.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.0",
+    "dotenv": "^16.4.0",
+    "pg": "^8.11.0",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.0",
+    "typeorm": "^0.3.20"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.0.0",
+    "@nestjs/schematics": "^10.0.0",
+    "@nestjs/testing": "^10.0.0",
+    "@types/express": "^4.17.17",
+    "@types/node": "^20.11.0",
+    "eslint": "^8.57.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.4.0"
+  }
+}
+version: '3.8'
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: flohg
+    ports: ['5432:5432']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7
+    ports: ['6379:6379']
+api/.env.example
+NODE_ENV=development
+PORT=8080
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/flohg
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=change_me
+PAYSTACK_SECRET=psk_test_xxx
+PAYSTACK_PUBLIC=pk_test_xxx
+TERMII_API_KEY=termiixxx
+KYC_PROVIDER=dojah
+DOJAH_APP_ID=xxx
+DOJAH_PUBLIC_KEY=xxx
+DOJAH_SECRET_KEY=xxx
+FILE_BUCKET=flohg-media
+FILE_CDN_URL=[localhost](http://localhost:8080/files)
+WEBHOOK_SECRET_RANDOM=change_me
+api/src/main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.enableCors();
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  const port = process.env.PORT || 8080;
+  await app.listen(port as number);
+  // eslint-disable-next-line no-console
+  console.log(`API running on :${port}`);
+}
+bootstrap();
+api/src/app.module.ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from './config/config.module';
+import { UsersModule } from './modules/users/users.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { TasksModule } from './modules/tasks/tasks.module';
+import { OffersModule } from './modules/offers/offers.module';
+import { AgreementsModule } from './modules/agreements/agreements.module';
+import {
